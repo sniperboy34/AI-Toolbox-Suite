@@ -1,7 +1,8 @@
 # Image Toolbox — Project State
 
-**Last updated:** 2026-07-18  
-**Location:** `C:\Users\AiDA\ai_tools\ImageToolbox`
+**Last updated:** 2026-07-19  
+**Location:** `C:\Users\AiDA\ai_tools\ImageToolbox`  
+**Status:** Stable — select/resize/convert workflow verified working end-to-end. Since the last update: the "Save Resize Values" button was removed (width/height are now read directly on "Process Images" click), output files no longer overwrite existing ones (auto-numbered instead), and a "Keep Aspect Ratio" checkbox was added. No open bugs.
 
 ---
 
@@ -150,10 +151,10 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`.
 |---|---|
 | **Select Images** | Opens a file dialog for JPG, JPEG, PNG, WEBP; populates the file list |
 | **Select Output Folder** | Chooses where processed images are saved |
-| **Width / Height** | Text fields for target pixel dimensions |
-| **Save Resize Values** | Validates and stores width/height (must be positive integers) |
+| **Width / Height** | Text fields for target pixel dimensions; read directly when **Process Images** is clicked (no separate save step) |
+| **Keep Aspect Ratio** | Checkbox. When checked, the image is scaled to fit inside the width/height box without distorting it. When unchecked, width and height are applied exactly (may stretch/squash) |
 | **Output Format** | Dropdown: JPG, PNG, or WEBP |
-| **Process Images** | Runs batch resize on all selected files |
+| **Process Images** | Runs batch resize on all selected files; disabled while processing, re-enabled when done (success or error) |
 | **Progress bar** | Shows per-file progress during processing |
 | **Status label** | Displays ready state, selection count, and processing progress |
 | **File listbox** | Shows basenames of selected images |
@@ -161,8 +162,11 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`.
 ### Processing behavior
 
 - Processing runs on a **background thread** so the UI stays responsive.
-- Each image is resized to the exact width and height entered (no aspect-ratio preservation).
+- The **Process Images** button is disabled the moment processing starts and re-enabled when it finishes, whether it finishes successfully or with an error — this prevents overlapping runs from a double-click.
+- Width and height are read from the entry fields at the moment **Process Images** is clicked and validated then (must be positive integers), rather than requiring a separate save step.
+- If **Keep Aspect Ratio** is checked, each image is scaled to fit inside the width/height box while preserving its original proportions. If unchecked, the image is resized to the exact width and height entered (may stretch/squash).
 - Output filenames keep the original basename with the chosen extension (e.g. `photo.jpg` → `photo.png`).
+- If a file with the target output name already exists, the new file is saved as `name (1).ext`, `name (2).ext`, etc. instead of overwriting it.
 - **JPG output:** RGBA and LA images are composited onto a white background before saving.
 - A completion dialog reports how many images were processed successfully.
 
@@ -170,9 +174,10 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`.
 
 1. Click **Select Images**
 2. Click **Select Output Folder**
-3. Enter width and height, then click **Save Resize Values**
-4. Choose output format (default: JPG)
-5. Click **Process Images**
+3. Enter width and height
+4. Optionally check **Keep Aspect Ratio**
+5. Choose output format (default: JPG)
+6. Click **Process Images**
 
 ---
 
@@ -180,9 +185,10 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`.
 
 Class `ImageProcessor` holds state and performs the actual resize/save:
 
-- **State:** selected files, output folder, width, height, output format
+- **State:** selected files, output folder, width, height, output format, keep-aspect-ratio flag
 - **`set_resize_values()`** — validates that width and height are digit strings
-- **`resize_image()`** — opens image with Pillow, resizes, converts for JPG if needed, saves to output folder
+- **`set_keep_aspect_ratio()`** — stores whether resizing should preserve the original aspect ratio
+- **`resize_image()`** — opens image with Pillow; computes target dimensions (exact width/height, or a fitted size if aspect ratio is preserved), resizes, converts for JPG if needed, and saves to the output folder. If the target filename already exists, appends ` (1)`, ` (2)`, etc. to avoid overwriting.
 - **Error handling:** exceptions during a single image return `False` (failure is not surfaced per file in the UI)
 
 ---
@@ -198,6 +204,10 @@ Changes made during the ImageToolbox setup session:
 5. **Added `run.bat`** — batch launcher with `cd /d "%~dp0"`
 6. **Verified environment** — Python 3.14.6, Pillow, and tkinter all available
 7. **Created this document** — `Image_Toolbox_Project_State.md`
+8. **Fixed: "Process Images" button stayed clickable during processing** — repeated clicks could start overlapping background threads that raced to write the same temp file, occasionally producing a corrupted/unopenable output image. `app/gui.py` now disables the button as soon as processing starts (`start_processing()`) and re-enables it in a `finally` block inside `resize_images()`, so it re-enables even if an error occurs. No other behavior was changed; `app/image_processor.py` was not modified.
+9. **Removed the "Save Resize Values" button** — `app/gui.py` no longer has a separate save step; width and height are now read straight from the entry fields and validated at the moment **Process Images** is clicked. `app/image_processor.py` was not modified for this change.
+10. **Prevented overwriting existing output files** — `app/image_processor.py`'s `resize_image()` now checks whether the target filename already exists and, if so, appends ` (1)`, ` (2)`, etc. until it finds an unused name (e.g. `photo.jpg` → `photo (1).jpg`). `app/gui.py` was not modified for this change.
+11. **Added a "Keep Aspect Ratio" checkbox** — `app/gui.py` adds the checkbox next to the width/height fields; `app/image_processor.py` gained `set_keep_aspect_ratio()` and, in `resize_image()`, computes a fitted size (preserving the original proportions) when the checkbox is on, instead of forcing the exact width/height. Existing exact-resize behavior is unchanged when the checkbox is off.
 
 ---
 
@@ -222,22 +232,28 @@ e1a470e firest commit
 
 ## 10. Known Limitations / Next Steps
 
+### Completed improvements
+
+- [x] **Disable "Process Images" button while processing** — completed 2026-07-19. Prevents overlapping background threads from racing on the same temp file. Tested and confirmed working.
+- [x] **Remove the "Save Resize Values" button** — completed 2026-07-19. Width/height are now read and validated directly when **Process Images** is clicked. Tested and confirmed working.
+- [x] **Prevent overwriting existing output files** — completed 2026-07-19. Output files that would collide with an existing name are now auto-numbered (`name (1).ext`, `name (2).ext`, ...). Tested and confirmed working.
+- [x] **Add aspect-ratio preserve toggle** — completed 2026-07-19. A "Keep Aspect Ratio" checkbox fits the image inside the requested width/height box without distorting it when checked; unchecked behavior (exact stretch) is unchanged. Tested and confirmed working.
+
 ### Current limitations
 
-- **Resize values must be saved first** — clicking **Process Images** without **Save Resize Values** shows an error even if fields are filled in.
-- **No aspect-ratio lock** — width and height are applied independently; images may appear stretched or squashed.
 - **Silent per-file failures** — if one image fails (corrupt file, permission error), it is skipped; only the success count is shown.
-- **No overwrite confirmation** — existing files in the output folder with the same name are overwritten.
 - **No README** — this document serves as the project reference for now.
 - **Launch scripts not committed** — `requirements.txt`, `run.ps1`, and `run.bat` are still untracked.
 
-### Possible improvements
+### Next recommended improvement
+
+**Show per-file error messages in the UI.** Right now a failed image is silently skipped and only the aggregate success count is shown at the end, so if some images fail there's no way to tell which ones or why without checking the output folder manually. Surfacing the filename and error reason for each failure (e.g. in the status label, a scrollable log area, or the completion dialog) would make failures actionable instead of just a lower number.
+
+### Other possible improvements (backlog)
 
 - Add a `README.md` with quick-start instructions
 - Pin Pillow version in `requirements.txt` (e.g. `Pillow>=12.3.0`)
 - Commit launch scripts and `requirements.txt`
-- Add aspect-ratio preserve toggle
-- Show per-file error messages in the UI
 - Add drag-and-drop for image selection
 - Add `.gitignore` for `__pycache__/`
 

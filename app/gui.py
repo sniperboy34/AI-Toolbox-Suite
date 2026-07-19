@@ -70,12 +70,14 @@ class ImageToolboxGUI:
         )
         self.height_entry.pack(side="left", padx=5)
 
-        self.save_size_button = tk.Button(
-            self.root,
-            text="Save Resize Values",
-            command=self.save_resize_values
+        self.keep_aspect_var = tk.BooleanVar(value=False)
+
+        self.keep_aspect_checkbox = tk.Checkbutton(
+            resize_frame,
+            text="Keep Aspect Ratio",
+            variable=self.keep_aspect_var
         )
-        self.save_size_button.pack(pady=5)
+        self.keep_aspect_checkbox.pack(side="left", padx=10)
 
         format_frame = tk.Frame(self.root)
         format_frame.pack(pady=5)
@@ -95,11 +97,28 @@ class ImageToolboxGUI:
             "WEBP"
         ).pack(side="left")
 
+        tk.Label(
+            format_frame,
+            text="Quality (JPEG/WEBP):"
+        ).pack(side="left", padx=(15, 0))
+
+        self.quality_var = tk.IntVar(value=95)
+
+        self.quality_slider = tk.Scale(
+            format_frame,
+            from_=1,
+            to=100,
+            orient="horizontal",
+            variable=self.quality_var,
+            length=150
+        )
+        self.quality_slider.pack(side="left", padx=5)
+
         self.resize_button = tk.Button(
             self.root,
             text="Process Images",
             width=20,
-            command=lambda: threading.Thread(target=self.resize_images, daemon=True).start()
+            command=self.start_processing
         )
         self.resize_button.pack(pady=5)
 
@@ -165,78 +184,79 @@ class ImageToolboxGUI:
                 text=f"Output Folder: {folder}"
             )
 
-    def save_resize_values(self):
-        if self.processor.set_resize_values(
-            self.width_entry.get(),
-            self.height_entry.get()
-        ):
-            messagebox.showinfo(
-                "Success",
-                "Resize values saved."
-            )
-        else:
-            messagebox.showerror(
-                "Error",
-                "Enter valid width and height."
-            )
+    def start_processing(self):
+        self.resize_button.config(state="disabled")
+        threading.Thread(target=self.resize_images, daemon=True).start()
 
     def resize_images(self):
-        files = self.processor.get_selected_files()
+        try:
+            files = self.processor.get_selected_files()
 
-        self.progress["value"] = 0
-        self.progress["maximum"] = len(files)
-        self.root.update_idletasks()
-
-        if not files:
-            messagebox.showerror(
-                "Error",
-                "No images selected."
-            )
-            return
-
-        if not self.processor.get_output_folder():
-            messagebox.showerror(
-                "Error",
-                "Please select output folder."
-            )
-            return
-
-        width, height = self.processor.get_resize_values()
-
-        if not width or not height:
-            messagebox.showerror(
-                "Error",
-                "Please enter resize values."
-            )
-            return
-
-        self.processor.set_output_format(
-            self.format_var.get()
-        )
-
-        success_count = 0
-
-        for index, file in enumerate(files, start=1):
-            result = self.processor.resize_image(file)
-
-            if result:
-                success_count += 1
-
-            self.progress["value"] = index
-
-            self.status_label.config(
-                text=f"Status: Processing {index}/{len(files)}"
-            )
-
+            self.progress["value"] = 0
+            self.progress["maximum"] = len(files)
             self.root.update_idletasks()
 
-        self.progress["value"] = len(files)
+            if not files:
+                messagebox.showerror(
+                    "Error",
+                    "No images selected."
+                )
+                return
 
-        self.status_label.config(
-            text=f"Status: {success_count} image(s) processed"
-        )
+            if not self.processor.get_output_folder():
+                messagebox.showerror(
+                    "Error",
+                    "Please select output folder."
+                )
+                return
 
-        messagebox.showinfo(
-            "Done",
-            f"{success_count} image(s) processed successfully."
-        )
+            if not self.processor.set_resize_values(
+                self.width_entry.get(),
+                self.height_entry.get()
+            ):
+                messagebox.showerror(
+                    "Error",
+                    "Enter valid width and height."
+                )
+                return
+
+            self.processor.set_output_format(
+                self.format_var.get()
+            )
+
+            self.processor.set_keep_aspect_ratio(
+                self.keep_aspect_var.get()
+            )
+
+            self.processor.set_quality(
+                self.quality_var.get()
+            )
+
+            success_count = 0
+
+            for index, file in enumerate(files, start=1):
+                result = self.processor.resize_image(file)
+
+                if result:
+                    success_count += 1
+
+                self.progress["value"] = index
+
+                self.status_label.config(
+                    text=f"Status: Processing {index}/{len(files)}"
+                )
+
+                self.root.update_idletasks()
+
+            self.progress["value"] = len(files)
+
+            self.status_label.config(
+                text=f"Status: {success_count} image(s) processed"
+            )
+
+            messagebox.showinfo(
+                "Done",
+                f"{success_count} image(s) processed successfully."
+            )
+        finally:
+            self.resize_button.config(state="normal")

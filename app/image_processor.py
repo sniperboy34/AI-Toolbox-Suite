@@ -8,6 +8,8 @@ class ImageProcessor:
         self.selected_files = []
         self.output_folder = ""
         self.width = None
+        self.width = None
+        self.width = None
         self.height = None
         self.output_format = "JPG"
         self.keep_aspect_ratio = False

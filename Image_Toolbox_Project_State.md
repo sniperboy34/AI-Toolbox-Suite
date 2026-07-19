@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-07-19  
 **Location:** `C:\Users\AiDA\ai_tools\ImageToolbox`  
-**Status:** Stable — select/resize/convert workflow verified working end-to-end. Since the last update: the "Save Resize Values" button was removed (width/height are now read directly on "Process Images" click), output files no longer overwrite existing ones (auto-numbered instead), and a "Keep Aspect Ratio" checkbox was added. No open bugs.
+**Status:** Stable — select/resize/convert workflow verified working end-to-end. Since the last update: a JPEG/WEBP quality slider (1–100, default 95) was added, and the GUI was rebuilt with ttk widgets (grouped LabelFrame sections, consistent spacing, a scrollbar on the file list) with no functional changes. No open bugs.
 
 ---
 
@@ -143,7 +143,7 @@ Or use a launch script (`run.ps1` / `run.bat`) that handles the directory change
 
 ## 6. GUI Features
 
-The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`.
+The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`, built with `ttk` widgets (grouped into "Files", "Resize Options", and "Output Options" sections) for a cleaner, better-spaced layout.
 
 ### Controls
 
@@ -154,10 +154,11 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`.
 | **Width / Height** | Text fields for target pixel dimensions; read directly when **Process Images** is clicked (no separate save step) |
 | **Keep Aspect Ratio** | Checkbox. When checked, the image is scaled to fit inside the width/height box without distorting it. When unchecked, width and height are applied exactly (may stretch/squash) |
 | **Output Format** | Dropdown: JPG, PNG, or WEBP |
+| **Quality (JPEG/WEBP)** | Slider, 1–100, default 95. Only applied when saving as JPEG or WEBP; ignored for PNG |
 | **Process Images** | Runs batch resize on all selected files; disabled while processing, re-enabled when done (success or error) |
 | **Progress bar** | Shows per-file progress during processing |
 | **Status label** | Displays ready state, selection count, and processing progress |
-| **File listbox** | Shows basenames of selected images |
+| **File listbox** | Shows basenames of selected images (with a scrollbar) |
 
 ### Processing behavior
 
@@ -168,6 +169,7 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`.
 - Output filenames keep the original basename with the chosen extension (e.g. `photo.jpg` → `photo.png`).
 - If a file with the target output name already exists, the new file is saved as `name (1).ext`, `name (2).ext`, etc. instead of overwriting it.
 - **JPG output:** RGBA and LA images are composited onto a white background before saving.
+- For JPEG and WEBP output, the **Quality** slider value (1–100, default 95) is passed to Pillow's save; PNG ignores it since PNG is lossless.
 - A completion dialog reports how many images were processed successfully.
 
 ### Typical workflow
@@ -185,10 +187,11 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`.
 
 Class `ImageProcessor` holds state and performs the actual resize/save:
 
-- **State:** selected files, output folder, width, height, output format, keep-aspect-ratio flag
+- **State:** selected files, output folder, width, height, output format, keep-aspect-ratio flag, quality (default 95)
 - **`set_resize_values()`** — validates that width and height are digit strings
 - **`set_keep_aspect_ratio()`** — stores whether resizing should preserve the original aspect ratio
-- **`resize_image()`** — opens image with Pillow; computes target dimensions (exact width/height, or a fitted size if aspect ratio is preserved), resizes, converts for JPG if needed, and saves to the output folder. If the target filename already exists, appends ` (1)`, ` (2)`, etc. to avoid overwriting.
+- **`set_quality()`** — stores the JPEG/WEBP save quality (1–100)
+- **`resize_image()`** — opens image with Pillow; computes target dimensions (exact width/height, or a fitted size if aspect ratio is preserved), resizes, converts for JPG if needed, and saves to the output folder with the quality setting applied for JPEG/WEBP. If the target filename already exists, appends ` (1)`, ` (2)`, etc. to avoid overwriting.
 - **Error handling:** exceptions during a single image return `False` (failure is not surfaced per file in the UI)
 
 ---
@@ -208,6 +211,8 @@ Changes made during the ImageToolbox setup session:
 9. **Removed the "Save Resize Values" button** — `app/gui.py` no longer has a separate save step; width and height are now read straight from the entry fields and validated at the moment **Process Images** is clicked. `app/image_processor.py` was not modified for this change.
 10. **Prevented overwriting existing output files** — `app/image_processor.py`'s `resize_image()` now checks whether the target filename already exists and, if so, appends ` (1)`, ` (2)`, etc. until it finds an unused name (e.g. `photo.jpg` → `photo (1).jpg`). `app/gui.py` was not modified for this change.
 11. **Added a "Keep Aspect Ratio" checkbox** — `app/gui.py` adds the checkbox next to the width/height fields; `app/image_processor.py` gained `set_keep_aspect_ratio()` and, in `resize_image()`, computes a fitted size (preserving the original proportions) when the checkbox is on, instead of forcing the exact width/height. Existing exact-resize behavior is unchanged when the checkbox is off.
+12. **Added a JPEG/WEBP quality slider (1–100, default 95)** — `app/gui.py` adds a `tk.Scale` next to the output format dropdown. `app/image_processor.py` gained `set_quality()`/`get_quality()` and now passes `quality` to Pillow's save only when the format is JPEG or WEBP; PNG saves are unaffected.
+13. **Rebuilt the GUI with ttk widgets** — `app/gui.py` was rewritten using `ttk.Button`, `ttk.Label`, `ttk.Entry`, `ttk.Checkbutton`, and `ttk.Combobox` (replacing the old `tk.OptionMenu`), grouped into "Files", "Resize Options", and "Output Options" `ttk.LabelFrame` sections with consistent padding, plus a scrollbar added to the file list. The quality slider stays a `tk.Scale` (ttk's Scale has no integer-step "resolution" option and could otherwise feed non-integer values to the quality setting). No functional behavior changed; `app/image_processor.py` was not modified for this change.
 
 ---
 
@@ -238,6 +243,8 @@ e1a470e firest commit
 - [x] **Remove the "Save Resize Values" button** — completed 2026-07-19. Width/height are now read and validated directly when **Process Images** is clicked. Tested and confirmed working.
 - [x] **Prevent overwriting existing output files** — completed 2026-07-19. Output files that would collide with an existing name are now auto-numbered (`name (1).ext`, `name (2).ext`, ...). Tested and confirmed working.
 - [x] **Add aspect-ratio preserve toggle** — completed 2026-07-19. A "Keep Aspect Ratio" checkbox fits the image inside the requested width/height box without distorting it when checked; unchecked behavior (exact stretch) is unchanged. Tested and confirmed working.
+- [x] **Add a JPEG/WEBP quality slider** — completed 2026-07-19. Slider ranges 1–100, defaults to 95, and only affects JPEG/WEBP saves (PNG ignores it). Tested and confirmed working.
+- [x] **Improve the GUI layout with ttk widgets** — completed 2026-07-19. Rebuilt with `ttk` widgets, grouped sections (Files / Resize Options / Output Options), consistent spacing, and a scrollbar on the file list. No functionality changed. Tested and confirmed working.
 
 ### Current limitations
 
@@ -247,7 +254,7 @@ e1a470e firest commit
 
 ### Next recommended improvement
 
-**Show per-file error messages in the UI.** Right now a failed image is silently skipped and only the aggregate success count is shown at the end, so if some images fail there's no way to tell which ones or why without checking the output folder manually. Surfacing the filename and error reason for each failure (e.g. in the status label, a scrollable log area, or the completion dialog) would make failures actionable instead of just a lower number.
+**Show per-file error messages in the UI.** Right now a failed image is silently skipped and only the aggregate success count is shown at the end, so if some images fail there's no way to tell which ones or why without checking the output folder manually. Surfacing the filename and error reason for each failure (e.g. in the status label, a scrollable log area, or the completion dialog) would make failures actionable instead of just a lower number. This was already the recommended next step before the quality slider and ttk redesign were implemented, and remains the highest-value item still open.
 
 ### Other possible improvements (backlog)
 

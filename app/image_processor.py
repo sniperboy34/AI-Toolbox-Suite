@@ -36,26 +36,14 @@ class ImageProcessor:
         self.height = int(height)
         return True
 
-    def get_resize_values(self):
-        return self.width, self.height
-
     def set_output_format(self, file_format):
         self.output_format = file_format.upper()
-
-    def get_output_format(self):
-        return self.output_format
 
     def set_keep_aspect_ratio(self, keep_aspect_ratio):
         self.keep_aspect_ratio = bool(keep_aspect_ratio)
 
-    def get_keep_aspect_ratio(self):
-        return self.keep_aspect_ratio
-
     def set_quality(self, quality):
         self.quality = int(quality)
-
-    def get_quality(self):
-        return self.quality
 
     def resize_image(self, image_path):
         tmp_path = None

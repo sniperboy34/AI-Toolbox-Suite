@@ -1,8 +1,8 @@
 {
   "output_folder": "C:/Users/Artin/Pictures/Saved Pictures",
-  "width": "512",
-  "height": "512",
-  "output_format": "JPG",
-  "resize_preset": "512x512",
+  "width": "1280",
+  "height": "720",
+  "output_format": "WEBP",
+  "resize_preset": "1280x720 (HD)",
   "keep_aspect_ratio": false
 }

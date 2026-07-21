@@ -26,6 +26,8 @@ class ImageToolboxGUI:
         try:
             style.theme_use("clam")
         except tk.TclError:
+            # "clam" isn't guaranteed to be available on every Tk install;
+            # fall back to whatever the platform default theme is.
             pass
         style.configure("Title.TLabel", font=("Segoe UI", 20, "bold"))
 
@@ -71,7 +73,9 @@ class ImageToolboxGUI:
         resize_frame = ttk.LabelFrame(container, text="Resize Options", padding=15)
         resize_frame.pack(fill="x", pady=(0, 15))
 
-        RESIZE_PRESETS = {
+        # Common target sizes offered in the "Resize Preset" dropdown.
+        # "Custom" (appended below) lets the user type their own width/height.
+        self.resize_presets = {
             "64x64": (64, 64),
             "128x128": (128, 128),
             "256x256": (256, 256),
@@ -83,7 +87,6 @@ class ImageToolboxGUI:
             "2048x2048": (2048, 2048),
             "3840x2160 (4K)": (3840, 2160),
         }
-        self.resize_presets = RESIZE_PRESETS
 
         ttk.Label(resize_frame, text="Resize Preset:").grid(row=0, column=0, sticky="w")
 
@@ -92,7 +95,7 @@ class ImageToolboxGUI:
         self.preset_combo = ttk.Combobox(
             resize_frame,
             textvariable=self.preset_var,
-            values=list(RESIZE_PRESETS.keys()) + ["Custom"],
+            values=list(self.resize_presets.keys()) + ["Custom"],
             state="readonly",
             width=20
         )
@@ -249,18 +252,17 @@ class ImageToolboxGUI:
             self.processor.set_output_folder(output_folder)
             self.output_label.config(text=f"Output Folder: {output_folder}")
 
+        # Restore the preset first: if it's a real preset, on_preset_selected
+        # fills and locks Width/Height itself. Only fall back to the saved
+        # raw width/height below if the preset turned out to be "Custom".
         preset = settings.get("resize_preset", "Custom")
         if preset in self.resize_presets or preset == "Custom":
             self.preset_var.set(preset)
             self.on_preset_selected(save=False)
 
         if self.preset_var.get() == "Custom":
-            width = settings.get("width", "")
-            height = settings.get("height", "")
-            self.width_entry.delete(0, tk.END)
-            self.width_entry.insert(0, width)
-            self.height_entry.delete(0, tk.END)
-            self.height_entry.insert(0, height)
+            self._set_entry_value(self.width_entry, settings.get("width", ""))
+            self._set_entry_value(self.height_entry, settings.get("height", ""))
 
         output_format = settings.get("output_format", "JPG")
         if output_format in ("JPG", "PNG", "WEBP"):
@@ -272,27 +274,44 @@ class ImageToolboxGUI:
         self.save_settings()
         self.root.destroy()
 
+    def _set_entry_value(self, entry, value, disable=False):
+        """Replace an Entry's contents with `value`. Used for both
+        preset-filled fields (disable=True, so the user can't edit a
+        preset's numbers) and restoring a saved Custom width/height."""
+        entry.config(state="normal")
+        entry.delete(0, tk.END)
+        entry.insert(0, str(value))
+        if disable:
+            entry.config(state="disabled")
+
+    def _populate_file_list(self, paths):
+        """Insert each path's basename into the listbox, then refresh the
+        status label with the current total selection count. Shared by
+        select_images() (which lists everything) and on_drop() (which
+        only passes the newly-added paths, since the listbox already
+        holds whatever was selected before)."""
+        for path in paths:
+            self.file_listbox.insert(tk.END, os.path.basename(path))
+
+        self.status_label.config(
+            text=f"Status: {self.file_listbox.size()} image(s) selected"
+        )
+
     def on_preset_selected(self, event=None, save=True):
+        # save=False is used by load_settings(): it restores the preset
+        # before the rest of the saved state (format, keep-aspect, etc.)
+        # is applied, so saving here would write a half-restored settings
+        # file. The combobox binding and manual calls elsewhere all want
+        # the normal save=True behavior.
         preset = self.preset_var.get()
 
         if preset == "Custom":
             self.width_entry.config(state="normal")
             self.height_entry.config(state="normal")
-            if save:
-                self.save_settings()
-            return
-
-        width, height = self.resize_presets[preset]
-
-        self.width_entry.config(state="normal")
-        self.width_entry.delete(0, tk.END)
-        self.width_entry.insert(0, str(width))
-        self.width_entry.config(state="disabled")
-
-        self.height_entry.config(state="normal")
-        self.height_entry.delete(0, tk.END)
-        self.height_entry.insert(0, str(height))
-        self.height_entry.config(state="disabled")
+        else:
+            width, height = self.resize_presets[preset]
+            self._set_entry_value(self.width_entry, width, disable=True)
+            self._set_entry_value(self.height_entry, height, disable=True)
 
         if save:
             self.save_settings()
@@ -311,6 +330,8 @@ class ImageToolboxGUI:
 
         existing_files = list(self.processor.get_selected_files())
 
+        # Skip anything already selected, checking progressively so a
+        # duplicate path within this same drop is also only added once.
         added = []
         for path in new_files:
             if path not in existing_files:
@@ -321,16 +342,7 @@ class ImageToolboxGUI:
             return
 
         self.processor.set_selected_files(existing_files)
-
-        for path in added:
-            self.file_listbox.insert(
-                tk.END,
-                os.path.basename(path)
-            )
-
-        self.status_label.config(
-            text=f"Status: {len(existing_files)} image(s) selected"
-        )
+        self._populate_file_list(added)
 
     def select_images(self):
         files = filedialog.askopenfilenames(
@@ -344,16 +356,7 @@ class ImageToolboxGUI:
 
         if files:
             self.processor.set_selected_files(files)
-
-            for file in files:
-                self.file_listbox.insert(
-                    tk.END,
-                    os.path.basename(file)
-                )
-
-            self.status_label.config(
-                text=f"Status: {len(files)} image(s) selected"
-            )
+            self._populate_file_list(files)
 
     def select_output_folder(self):
         folder = filedialog.askdirectory()

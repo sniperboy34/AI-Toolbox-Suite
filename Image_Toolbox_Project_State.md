@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-07-19  
 **Location:** `C:\Users\AiDA\ai_tools\ImageToolbox`  
-**Status:** Stable — select/resize/convert workflow verified working end-to-end. Since the last update: `requirements.txt` dependency versions are now pinned (`Pillow>=12.3.0`, `tkinterdnd2>=0.6.2`) instead of unpinned. No open bugs.
+**Status:** Stable — select/resize/convert workflow verified working end-to-end. Since the last update: a full code review was completed — removed 4 unused getter methods from `ImageProcessor`, deduplicated repeated widget-manipulation code in `ImageToolboxGUI` into small helper methods, and added clarifying comments. No behavior changed (full regression suite re-run and passing). Also fixed a documentation gap: `.gitignore` was missing from `README.md`'s Project Structure diagram. No open bugs.
 
 ---
 
@@ -28,6 +28,7 @@ ImageToolbox/
 ├── main.py                        # Entry point — launches drag-and-drop-capable tkinter GUI
 ├── requirements.txt               # Python dependencies (Pillow, tkinterdnd2)
 ├── README.md                      # User-facing quick-start and feature overview
+├── .gitignore                     # Ignores __pycache__/, *.pyc, settings.json
 ├── run.ps1                        # PowerShell launcher script
 ├── run.bat                        # Windows batch launcher script
 ├── Image_Toolbox_Project_State.md # This document
@@ -201,6 +202,7 @@ Class `ImageProcessor` holds state and performs the actual resize/save:
 - **`set_quality()`** — stores the JPEG/WEBP save quality (1–100)
 - **`resize_image()`** — opens image with Pillow; computes target dimensions (exact width/height, or a fitted size if aspect ratio is preserved), resizes, converts for JPG if needed, and saves to the output folder with the quality setting applied for JPEG/WEBP. If the target filename already exists, appends ` (1)`, ` (2)`, etc. to avoid overwriting.
 - **Error handling:** on success returns the output path; on failure, raises the underlying exception (e.g. `ValueError` for unset output folder/resize values, `PIL.UnidentifiedImageError` for a corrupt/unreadable file, `OSError`/`FileNotFoundError` for missing files) with its original message intact, so the caller can report which file failed and why. The temp-file cleanup (`finally` block) still runs regardless of success or failure.
+- Note: `get_resize_values()`, `get_output_format()`, `get_keep_aspect_ratio()`, and `get_quality()` were removed in the 2026-07-19 code review — they were unused getters left over from earlier iterations of the GUI. Only the `set_*` half of each pair and `get_selected_files()`/`get_output_folder()` (both still used by `app/gui.py`) remain.
 
 ---
 
@@ -228,6 +230,9 @@ Changes made during the ImageToolbox setup session:
 18. **Received the real `README.md` and `requirements.txt` and synced them with actual behavior** — previously only described in this document, never actually available to edit. `requirements.txt` gained the `tkinterdnd2` line it was missing since drag & drop was added (item 17). `README.md` was fully rewritten: it had described an old version of the app (a "Save Resize Values" button that no longer exists, no mention of Resize Presets, Keep Aspect Ratio, the quality slider, drag & drop, or settings persistence, and it incorrectly stated existing output files get overwritten). The new `README.md` documents the current feature set, workflow, and project structure accurately. Re-confirmed (no code change) that overwrite-prevention still produces `name (1).ext` / `(2)` / `(3)` correctly for JPG, PNG, and WEBP.
 19. **Improved batch processing error reporting** — `app/image_processor.py`'s `resize_image()` no longer swallows exceptions and returns `False`; it now raises the original exception (with message intact) after the pre-flight checks were converted from silent `return False` to `raise ValueError(...)`. The `finally` block still cleans up the `.tmp` file on any failure. `app/gui.py`'s `resize_images()` loop now wraps each `resize_image()` call in `try/except`, collecting `(filename, error_message)` pairs into a `failures` list while continuing to the next file — one bad image no longer silently reduces the count with no explanation. At the end, a summary dialog shows `Successful: X` / `Failed: Y`, and if there were any failures, a new scrollable `show_failures_dialog()` (a `Toplevel` with a read-only `tk.Text` + `ttk.Scrollbar`) lists every failed filename and its exact error message. The status label was updated to `"X succeeded, Y failed"`. Tested with a mix of a valid image, a corrupt file, and a missing file: processing continued past both failures, the correct filenames/messages were captured, and the failures dialog was only triggered when `failures` was non-empty. Also re-ran the full preset/aspect-ratio/quality/drag-drop regression suite to confirm nothing else broke.
 20. **Pinned dependency versions in `requirements.txt`** — changed `Pillow` / `tkinterdnd2` (unpinned) to `Pillow>=12.3.0` / `tkinterdnd2>=0.6.2`, matching the versions already verified working (§3). Confirmed `pip install -r requirements.txt` resolves correctly with the pins (dry-run tested). `README.md`'s Requirements table updated to show the pinned minimums. No code files changed.
+21. **Added `.gitignore`** — new file at the project root ignoring `__pycache__/`, `*.pyc`, and `settings.json`. Verified with a throwaway `git init` + `git add -A` test that a `__pycache__/*.pyc` file and `settings.json` are excluded while `main.py` and every file under `app/` (source code) are staged normally. No source files are ignored.
+22. **Reviewed the repository for first public release** — no functionality changes; documentation-only. Reconstructed the full documented project structure (`main.py`, `requirements.txt`, `README.md`, `.gitignore`, `run.ps1`, `run.bat`, `Image_Toolbox_Project_State.md`, `app/__init__.py`, `app/gui.py`, `app/image_processor.py`, plus a `settings.json` and a stray `__pycache__/*.pyc`) in a throwaway `git init` + `git add -A` test: confirmed every source and documentation file gets staged, and `settings.json`/`__pycache__/` are correctly excluded by `.gitignore`. Checked for standard public-release files (`LICENSE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `.gitattributes`) — all absent except `.gitignore`. **Finding: no `LICENSE` file exists.** This is the one real gap for a public release; adding one requires the user to pick a license (MIT, Apache-2.0, GPL, etc.) since that's a legal/licensing decision, not something to choose unilaterally.
+23. **Full code review** — read every project file, then cleaned up `app/image_processor.py` and `app/gui.py` with no behavior change (verified with a 6-part regression suite: preset fill/lock, Custom unlock, file-list population, drag-drop dedup, settings persistence round-trip, and mixed-success/failure error reporting — all passed after the changes). Specifically: (1) **Dead code removed** — `get_resize_values()`, `get_output_format()`, `get_keep_aspect_ratio()`, `get_quality()` in `ImageProcessor` were confirmed unused anywhere in the project (grepped) and deleted. (2) **Duplicate code removed** — `app/gui.py` gained two helpers: `_set_entry_value()` (replace-and-optionally-disable an Entry, previously hand-written 3–4 times across `on_preset_selected()` and `load_settings()`) and `_populate_file_list()` (insert basenames + refresh the status label, previously duplicated between `select_images()` and `on_drop()`). `on_preset_selected()` was also simplified from two separate `if save:` branches with an early return into one shared trailing check. (3) **Readability** — removed a redundant `RESIZE_PRESETS` local variable that was immediately aliased to `self.resize_presets` (now assigned directly). (4) **Comments improved** — added rationale comments for the `ttk.Style` theme fallback, the `save` parameter on `on_preset_selected()`, and the restore-order dependency in `load_settings()` (preset before Custom width/height). Also fixed a `README.md` accuracy gap found during the review: `.gitignore` was missing from the Project Structure diagram.
 
 ---
 
@@ -246,7 +251,7 @@ e1a470e firest commit
 
 **Tracked:** `main.py`, `app/__init__.py`, `app/gui.py`, `app/image_processor.py`
 
-**Untracked:** `requirements.txt`, `README.md`, `run.ps1`, `run.bat`, `Image_Toolbox_Project_State.md`, `settings.json`, `__pycache__/` directories
+**Untracked:** `requirements.txt`, `README.md`, `.gitignore`, `run.ps1`, `run.bat`, `Image_Toolbox_Project_State.md` (`settings.json` and `__pycache__/` are now covered by `.gitignore` and would be excluded automatically once other files are committed)
 
 ---
 
@@ -265,20 +270,22 @@ e1a470e firest commit
 - [x] **Add Drag & Drop support** — completed 2026-07-19. Dropping JPG/JPEG/PNG/WEBP files onto the main window adds them to the file list (deduplicated, additive to the existing selection); unsupported files are ignored. Requires the new `tkinterdnd2` dependency. Tested: single file, multiple files (including space-containing paths), duplicate drop, and unsupported-file drop.
 - [x] **Improve batch processing error reporting** — completed 2026-07-19. Failures no longer stop or silently reduce the count: each failure is caught, logged with filename + exact error message, and processing continues. A `Successful: X / Failed: Y` summary always shows, with a scrollable dialog listing failures when there are any. Tested with valid/corrupt/missing files mixed in one batch.
 - [x] **Pin dependency versions in `requirements.txt`** — completed 2026-07-19. `Pillow>=12.3.0`, `tkinterdnd2>=0.6.2`. Verified installable via `pip install -r requirements.txt` dry-run.
+- [x] **Add `.gitignore`** — completed 2026-07-19. Ignores `__pycache__/`, `*.pyc`, `settings.json`; verified source code is never ignored.
+- [x] **Review repository for first public release** — completed 2026-07-19 (documentation-only, no functionality changes). Verified all important files are tracked/correctly ignored via a simulated full-structure `git add -A`. Identified one gap: no `LICENSE` file.
+- [x] **Full code review** — completed 2026-07-19, no behavior change (regression-tested). Removed 4 dead `ImageProcessor` getters, deduplicated repeated GUI widget-manipulation code into two helper methods, simplified a redundant local variable, and added clarifying comments. Also fixed a `.gitignore` omission in `README.md`'s structure diagram.
 
 ### Current limitations
 
-- **Launch scripts not committed** — `requirements.txt`, `README.md`, `run.ps1`, and `run.bat` are still untracked.
-- **`settings.json` is untracked** — like the other generated/local files, it isn't part of git tracking (see §9) and isn't yet listed in a `.gitignore`.
+- **No `LICENSE` file** — needed before a genuinely public release; blocked on the user choosing a license type (MIT, Apache-2.0, GPL, etc.), which isn't something to pick automatically.
+- **`README.md`, `requirements.txt`, `.gitignore`, and the launch scripts are still uncommitted** — they exist on disk and are current, but `git status` still shows them as untracked (see §9); nothing has actually run `git add`/`git commit` on them yet.
 
 ### Next recommended improvement
 
-**Commit `README.md`, `requirements.txt`, and the launch scripts, and add a `.gitignore`.** These files have existed and been maintained for several rounds now but are still untracked in git (§9), and generated artifacts like `__pycache__/` and `settings.json` have no `.gitignore` entry to keep them out of version control. This is now the most out-of-date piece of the project relative to its actual state.
+**Add a `LICENSE` file, then commit everything.** The repository is otherwise release-ready — all files are accounted for and `.gitignore` is correct — but it's missing a license, and none of the current documentation/config files (`README.md`, `requirements.txt`, `.gitignore`, `run.ps1`, `run.bat`) have actually been committed yet. Once a license is chosen, both of these can be resolved together with a single `git add -A && git commit`.
 
 ### Other possible improvements (backlog)
 
-- Commit `README.md`, launch scripts, and `requirements.txt`
-- Add `.gitignore` for `__pycache__/` and `settings.json`
+_None currently — LICENSE + committing (above) are the only open items._
 
 ---
 

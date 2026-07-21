@@ -64,6 +64,7 @@ Your choices are saved automatically and restored the next time you open the app
 ImageToolbox/
 ├── main.py                # Entry point — launches the drag-and-drop-capable tkinter GUI
 ├── requirements.txt       # Python dependencies (Pillow, tkinterdnd2)
+├── .gitignore              # Ignores __pycache__/, *.pyc, settings.json
 ├── run.ps1                # PowerShell launcher script
 ├── run.bat                # Windows batch launcher script
 ├── settings.json           # Auto-generated: your saved settings (created on first run)

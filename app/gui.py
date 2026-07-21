@@ -1,11 +1,16 @@
 import os
+import json
 import tkinter as tk
 import threading
 from tkinter import filedialog, messagebox, ttk
 
+from tkinterdnd2 import DND_FILES
+
 from app.image_processor import ImageProcessor
 
 APP_TITLE = "Image Toolbox"
+SETTINGS_FILENAME = "settings.json"
+DROPPABLE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 
 
 class ImageToolboxGUI:
@@ -73,10 +78,10 @@ class ImageToolboxGUI:
             "512x512": (512, 512),
             "800x600": (800, 600),
             "1024x768": (1024, 768),
-            "1280x720": (1280, 720),
-            "1920x1080": (1920, 1080),
+            "1280x720 (HD)": (1280, 720),
+            "1920x1080 (Full HD)": (1920, 1080),
             "2048x2048": (2048, 2048),
-            "3840x2160": (3840, 2160),
+            "3840x2160 (4K)": (3840, 2160),
         }
         self.resize_presets = RESIZE_PRESETS
 
@@ -89,7 +94,7 @@ class ImageToolboxGUI:
             textvariable=self.preset_var,
             values=list(RESIZE_PRESETS.keys()) + ["Custom"],
             state="readonly",
-            width=12
+            width=20
         )
         self.preset_combo.grid(row=0, column=1, columnspan=2, padx=(8, 20), pady=(0, 10), sticky="w")
         self.preset_combo.bind("<<ComboboxSelected>>", self.on_preset_selected)
@@ -188,12 +193,93 @@ class ImageToolboxGUI:
         self.file_listbox.pack(side="left", fill="both", expand=True)
         list_scroll.pack(side="right", fill="y")
 
-    def on_preset_selected(self, event=None):
+        # --- Persistent settings --------------------------------------------
+        # Auto-save whenever a persisted setting changes.
+        self.format_var.trace_add("write", lambda *_: self.save_settings())
+        self.keep_aspect_var.trace_add("write", lambda *_: self.save_settings())
+        self.width_entry.bind("<FocusOut>", self.save_settings)
+        self.height_entry.bind("<FocusOut>", self.save_settings)
+
+        # Also save on close, so any in-progress edits aren't lost.
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # --- Drag & drop ------------------------------------------------------
+        self.root.drop_target_register(DND_FILES)
+        self.root.dnd_bind("<<Drop>>", self.on_drop)
+
+        # Restore settings saved from a previous run, if any.
+        self.load_settings()
+
+    def _settings_path(self):
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(project_root, SETTINGS_FILENAME)
+
+    def save_settings(self, event=None):
+        settings = {
+            "output_folder": self.processor.get_output_folder(),
+            "width": self.width_entry.get(),
+            "height": self.height_entry.get(),
+            "output_format": self.format_var.get(),
+            "resize_preset": self.preset_var.get(),
+            "keep_aspect_ratio": self.keep_aspect_var.get(),
+        }
+
+        try:
+            with open(self._settings_path(), "w", encoding="utf-8") as f:
+                json.dump(settings, f, indent=2)
+        except OSError:
+            # Persisting settings is a convenience, not critical —
+            # ignore failures (e.g. read-only folder) silently.
+            pass
+
+    def load_settings(self):
+        path = self._settings_path()
+
+        if not os.path.exists(path):
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+        except (OSError, ValueError):
+            return
+
+        output_folder = settings.get("output_folder") or ""
+        if output_folder:
+            self.processor.set_output_folder(output_folder)
+            self.output_label.config(text=f"Output Folder: {output_folder}")
+
+        preset = settings.get("resize_preset", "Custom")
+        if preset in self.resize_presets or preset == "Custom":
+            self.preset_var.set(preset)
+            self.on_preset_selected(save=False)
+
+        if self.preset_var.get() == "Custom":
+            width = settings.get("width", "")
+            height = settings.get("height", "")
+            self.width_entry.delete(0, tk.END)
+            self.width_entry.insert(0, width)
+            self.height_entry.delete(0, tk.END)
+            self.height_entry.insert(0, height)
+
+        output_format = settings.get("output_format", "JPG")
+        if output_format in ("JPG", "PNG", "WEBP"):
+            self.format_var.set(output_format)
+
+        self.keep_aspect_var.set(bool(settings.get("keep_aspect_ratio", False)))
+
+    def _on_close(self):
+        self.save_settings()
+        self.root.destroy()
+
+    def on_preset_selected(self, event=None, save=True):
         preset = self.preset_var.get()
 
         if preset == "Custom":
             self.width_entry.config(state="normal")
             self.height_entry.config(state="normal")
+            if save:
+                self.save_settings()
             return
 
         width, height = self.resize_presets[preset]
@@ -207,6 +293,44 @@ class ImageToolboxGUI:
         self.height_entry.delete(0, tk.END)
         self.height_entry.insert(0, str(height))
         self.height_entry.config(state="disabled")
+
+        if save:
+            self.save_settings()
+
+    def on_drop(self, event):
+        dropped_paths = self.root.tk.splitlist(event.data)
+
+        new_files = [
+            path for path in dropped_paths
+            if os.path.isfile(path)
+            and path.lower().endswith(DROPPABLE_EXTENSIONS)
+        ]
+
+        if not new_files:
+            return
+
+        existing_files = list(self.processor.get_selected_files())
+
+        added = []
+        for path in new_files:
+            if path not in existing_files:
+                existing_files.append(path)
+                added.append(path)
+
+        if not added:
+            return
+
+        self.processor.set_selected_files(existing_files)
+
+        for path in added:
+            self.file_listbox.insert(
+                tk.END,
+                os.path.basename(path)
+            )
+
+        self.status_label.config(
+            text=f"Status: {len(existing_files)} image(s) selected"
+        )
 
     def select_images(self):
         files = filedialog.askopenfilenames(
@@ -239,6 +363,7 @@ class ImageToolboxGUI:
             self.output_label.config(
                 text=f"Output Folder: {folder}"
             )
+            self.save_settings()
 
     def start_processing(self):
         self.resize_button.config(state="disabled")
@@ -289,12 +414,14 @@ class ImageToolboxGUI:
             )
 
             success_count = 0
+            failures = []
 
             for index, file in enumerate(files, start=1):
-                result = self.processor.resize_image(file)
-
-                if result:
+                try:
+                    self.processor.resize_image(file)
                     success_count += 1
+                except Exception as error:
+                    failures.append((os.path.basename(file), str(error)))
 
                 self.progress["value"] = index
 
@@ -307,12 +434,56 @@ class ImageToolboxGUI:
             self.progress["value"] = len(files)
 
             self.status_label.config(
-                text=f"Status: {success_count} image(s) processed"
+                text=f"Status: {success_count} succeeded, {len(failures)} failed"
             )
 
             messagebox.showinfo(
                 "Done",
-                f"{success_count} image(s) processed successfully."
+                f"Successful: {success_count}\nFailed: {len(failures)}"
             )
+
+            if failures:
+                self.show_failures_dialog(failures)
         finally:
             self.resize_button.config(state="normal")
+
+    def show_failures_dialog(self, failures):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Failed Images")
+        dialog.geometry("520x320")
+        dialog.transient(self.root)
+
+        container = ttk.Frame(dialog, padding=15)
+        container.pack(fill="both", expand=True)
+
+        ttk.Label(
+            container,
+            text=f"{len(failures)} image(s) failed to process:"
+        ).pack(anchor="w", pady=(0, 10))
+
+        list_frame = ttk.Frame(container)
+        list_frame.pack(fill="both", expand=True)
+
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical")
+
+        failures_text = tk.Text(
+            list_frame,
+            wrap="word",
+            yscrollcommand=scrollbar.set,
+            height=12
+        )
+        scrollbar.config(command=failures_text.yview)
+
+        for filename, error_message in failures:
+            failures_text.insert(tk.END, f"{filename}\n    {error_message}\n\n")
+
+        failures_text.config(state="disabled")
+
+        failures_text.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        ttk.Button(
+            container,
+            text="Close",
+            command=dialog.destroy
+        ).pack(pady=(10, 0))

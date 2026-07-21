@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-07-19  
 **Location:** `C:\Users\AiDA\ai_tools\ImageToolbox`  
-**Status:** Stable — select/resize/convert workflow verified working end-to-end. Since the last update: a JPEG/WEBP quality slider (1–100, default 95) was added, and the GUI was rebuilt with ttk widgets (grouped LabelFrame sections, consistent spacing, a scrollbar on the file list) with no functional changes. No open bugs.
+**Status:** Stable — select/resize/convert workflow verified working end-to-end. Since the last update: `requirements.txt` dependency versions are now pinned (`Pillow>=12.3.0`, `tkinterdnd2>=0.6.2`) instead of unpinned. No open bugs.
 
 ---
 
@@ -17,7 +17,7 @@
 | Image processing | Pillow (PIL) |
 | Platform | Windows (primary target) |
 
-**Entry point:** `main.py` creates a tkinter root window and launches `ImageToolboxGUI`.
+**Entry point:** `main.py` creates a `TkinterDnD.Tk()` root window (a drop-in, drag-and-drop-capable subclass of `tk.Tk`) and launches `ImageToolboxGUI`.
 
 ---
 
@@ -25,11 +25,13 @@
 
 ```
 ImageToolbox/
-├── main.py                        # Entry point — launches tkinter GUI
-├── requirements.txt               # Python dependencies (Pillow)
+├── main.py                        # Entry point — launches drag-and-drop-capable tkinter GUI
+├── requirements.txt               # Python dependencies (Pillow, tkinterdnd2)
+├── README.md                      # User-facing quick-start and feature overview
 ├── run.ps1                        # PowerShell launcher script
 ├── run.bat                        # Windows batch launcher script
 ├── Image_Toolbox_Project_State.md # This document
+├── settings.json                  # Auto-generated: persisted GUI settings (created on first save)
 └── app/
     ├── __init__.py                # Empty package marker
     ├── gui.py                     # tkinter UI (ImageToolboxGUI)
@@ -38,7 +40,7 @@ ImageToolbox/
 
 **Git-tracked files (Initial commit):** `main.py`, `app/__init__.py`, `app/gui.py`, `app/image_processor.py`
 
-**Untracked (not yet committed):** `requirements.txt`, `run.ps1`, `run.bat`, `Image_Toolbox_Project_State.md`
+**Untracked (not yet committed):** `requirements.txt`, `README.md`, `run.ps1`, `run.bat`, `Image_Toolbox_Project_State.md`
 
 ---
 
@@ -47,8 +49,9 @@ ImageToolbox/
 | Dependency | Version / Status | Notes |
 |---|---|---|
 | **Python** | 3.14.6 | Installed and on PATH (`python --version`) |
-| **Pillow** | 12.3.0 | Required for image I/O and resizing. Listed in `requirements.txt` |
+| **Pillow** | >=12.3.0 (pinned) | Required for image I/O and resizing. Listed in `requirements.txt` |
 | **tkinter** | Bundled | Included with standard Python on Windows; no separate install |
+| **tkinterdnd2** | >=0.6.2 (pinned) | Required for drag-and-drop support. Listed in `requirements.txt` |
 
 ### Install dependencies
 
@@ -152,6 +155,7 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`, built with `tt
 | **Select Images** | Opens a file dialog for JPG, JPEG, PNG, WEBP; populates the file list |
 | **Select Output Folder** | Chooses where processed images are saved |
 | **Width / Height** | Text fields for target pixel dimensions; read directly when **Process Images** is clicked (no separate save step) |
+| **Resize Preset** | Combobox with 10 common sizes (64×64 up to 3840×2160 (4K)) plus **Custom**. Choosing a preset fills Width/Height and locks them; choosing **Custom** unlocks them for manual entry |
 | **Keep Aspect Ratio** | Checkbox. When checked, the image is scaled to fit inside the width/height box without distorting it. When unchecked, width and height are applied exactly (may stretch/squash) |
 | **Output Format** | Dropdown: JPG, PNG, or WEBP |
 | **Quality (JPEG/WEBP)** | Slider, 1–100, default 95. Only applied when saving as JPEG or WEBP; ignored for PNG |
@@ -159,24 +163,28 @@ The UI is implemented in `app/gui.py` as class `ImageToolboxGUI`, built with `tt
 | **Progress bar** | Shows per-file progress during processing |
 | **Status label** | Displays ready state, selection count, and processing progress |
 | **File listbox** | Shows basenames of selected images (with a scrollbar) |
+| **Drag & Drop** | Not a widget — drop JPG/JPEG/PNG/WEBP files anywhere on the main window to add them to the file list (in addition to, not replacing, files already selected) |
 
 ### Processing behavior
 
 - Processing runs on a **background thread** so the UI stays responsive.
 - The **Process Images** button is disabled the moment processing starts and re-enabled when it finishes, whether it finishes successfully or with an error — this prevents overlapping runs from a double-click.
 - Width and height are read from the entry fields at the moment **Process Images** is clicked and validated then (must be positive integers), rather than requiring a separate save step.
+- The **Resize Preset** combobox can fill Width/Height automatically; selecting a preset disables those fields (their filled-in values are still read normally when processing), and selecting **Custom** re-enables manual editing.
 - If **Keep Aspect Ratio** is checked, each image is scaled to fit inside the width/height box while preserving its original proportions. If unchecked, the image is resized to the exact width and height entered (may stretch/squash).
 - Output filenames keep the original basename with the chosen extension (e.g. `photo.jpg` → `photo.png`).
 - If a file with the target output name already exists, the new file is saved as `name (1).ext`, `name (2).ext`, etc. instead of overwriting it.
 - **JPG output:** RGBA and LA images are composited onto a white background before saving.
 - For JPEG and WEBP output, the **Quality** slider value (1–100, default 95) is passed to Pillow's save; PNG ignores it since PNG is lossless.
 - A completion dialog reports how many images were processed successfully.
+- **Settings persistence:** Output Folder, Width, Height, Output Format, Resize Preset, and Keep Aspect Ratio are saved automatically to `settings.json` (in the project root) whenever they change — on output folder selection, preset selection, format/checkbox toggle, leaving a width/height field, or closing the window — and are restored automatically the next time the app starts.
+- **Drag & drop:** dropping files onto the main window filters them to `.jpg`/`.jpeg`/`.png`/`.webp` (case-insensitive), skips anything already in the selection (no duplicates), and adds the rest to both the internal file list and the listbox. Unsupported files dropped alongside supported ones are silently ignored rather than blocking the whole drop.
 
 ### Typical workflow
 
 1. Click **Select Images**
 2. Click **Select Output Folder**
-3. Enter width and height
+3. Pick a **Resize Preset**, or leave it on **Custom** and enter width/height manually
 4. Optionally check **Keep Aspect Ratio**
 5. Choose output format (default: JPG)
 6. Click **Process Images**
@@ -192,7 +200,7 @@ Class `ImageProcessor` holds state and performs the actual resize/save:
 - **`set_keep_aspect_ratio()`** — stores whether resizing should preserve the original aspect ratio
 - **`set_quality()`** — stores the JPEG/WEBP save quality (1–100)
 - **`resize_image()`** — opens image with Pillow; computes target dimensions (exact width/height, or a fitted size if aspect ratio is preserved), resizes, converts for JPG if needed, and saves to the output folder with the quality setting applied for JPEG/WEBP. If the target filename already exists, appends ` (1)`, ` (2)`, etc. to avoid overwriting.
-- **Error handling:** exceptions during a single image return `False` (failure is not surfaced per file in the UI)
+- **Error handling:** on success returns the output path; on failure, raises the underlying exception (e.g. `ValueError` for unset output folder/resize values, `PIL.UnidentifiedImageError` for a corrupt/unreadable file, `OSError`/`FileNotFoundError` for missing files) with its original message intact, so the caller can report which file failed and why. The temp-file cleanup (`finally` block) still runs regardless of success or failure.
 
 ---
 
@@ -213,6 +221,13 @@ Changes made during the ImageToolbox setup session:
 11. **Added a "Keep Aspect Ratio" checkbox** — `app/gui.py` adds the checkbox next to the width/height fields; `app/image_processor.py` gained `set_keep_aspect_ratio()` and, in `resize_image()`, computes a fitted size (preserving the original proportions) when the checkbox is on, instead of forcing the exact width/height. Existing exact-resize behavior is unchanged when the checkbox is off.
 12. **Added a JPEG/WEBP quality slider (1–100, default 95)** — `app/gui.py` adds a `tk.Scale` next to the output format dropdown. `app/image_processor.py` gained `set_quality()`/`get_quality()` and now passes `quality` to Pillow's save only when the format is JPEG or WEBP; PNG saves are unaffected.
 13. **Rebuilt the GUI with ttk widgets** — `app/gui.py` was rewritten using `ttk.Button`, `ttk.Label`, `ttk.Entry`, `ttk.Checkbutton`, and `ttk.Combobox` (replacing the old `tk.OptionMenu`), grouped into "Files", "Resize Options", and "Output Options" `ttk.LabelFrame` sections with consistent padding, plus a scrollbar added to the file list. The quality slider stays a `tk.Scale` (ttk's Scale has no integer-step "resolution" option and could otherwise feed non-integer values to the quality setting). No functional behavior changed; `app/image_processor.py` was not modified for this change.
+14. **Added a Resize Preset system** — `app/gui.py` adds a `ttk.Combobox` named "Resize Preset" with 10 common sizes (64×64, 128×128, 256×256, 512×512, 800×600, 1024×768, 1280×720 (HD), 1920×1080 (Full HD), 2048×2048, 3840×2160 (4K)) plus "Custom". Selecting a preset fills Width/Height and disables those fields (via `on_preset_selected()`); selecting "Custom" re-enables manual editing. Disabled fields still report their value through `.get()`, so processing logic is unaffected. `app/image_processor.py` was not modified for this change.
+15. **Re-verified "Keep Aspect Ratio" and overwrite-prevention against expanded requirements** — no code changes. Confirmed the aspect-ratio toggle produces correctly fitted output both when a **Resize Preset** is selected (e.g. 1920×1080 → 960×1080 for the test image) and with manually-entered **Custom** values (e.g. 400×400 → 356×400). Confirmed the overwrite-prevention naming (`name (1).ext`, `name (2).ext`, `name (3).ext`, ...) behaves identically across JPG, PNG, and WEBP.
+16. **Added persistent application settings** — `app/gui.py` now saves Output Folder, Width, Height, Output Format, Resize Preset, and Keep Aspect Ratio to `settings.json` (stored next to `main.py`, via `_settings_path()`) through a new `save_settings()`/`load_settings()` pair. Saves are triggered automatically: after picking an output folder, after a preset selection, on format/keep-aspect changes (`trace_add`), when a width/height field loses focus, and on window close (`WM_DELETE_WINDOW`). `load_settings()` restores everything at startup, including re-locking Width/Height if a non-Custom preset was saved. A `save` flag on `on_preset_selected()` prevents `load_settings()` from writing a partially-restored state back to disk mid-load. Missing or unreadable `settings.json` is treated as "no saved settings" (falls back to current defaults) rather than raising an error. `app/image_processor.py` was not modified for this change.
+17. **Added Drag & Drop support** — required the new `tkinterdnd2` dependency (`pip install tkinterdnd2`, v0.6.2 verified; not yet added to `requirements.txt`). `main.py` now creates the root window with `TkinterDnD.Tk()` instead of `tk.Tk()` (a drop-in subclass) so drag-and-drop events are available. `app/gui.py` registers the main window as a drop target (`DND_FILES`) and adds an `on_drop()` handler: it parses the dropped-path string with `self.root.tk.splitlist()` (correctly handles brace-quoted paths with spaces), filters to `.jpg`/`.jpeg`/`.png`/`.webp` (case-insensitive), skips files already selected, and adds the rest to both `ImageProcessor`'s selected-files list and the listbox — same end state as clicking **Select Images**, but additive rather than replacing the current selection. `app/image_processor.py` was not modified for this change.
+18. **Received the real `README.md` and `requirements.txt` and synced them with actual behavior** — previously only described in this document, never actually available to edit. `requirements.txt` gained the `tkinterdnd2` line it was missing since drag & drop was added (item 17). `README.md` was fully rewritten: it had described an old version of the app (a "Save Resize Values" button that no longer exists, no mention of Resize Presets, Keep Aspect Ratio, the quality slider, drag & drop, or settings persistence, and it incorrectly stated existing output files get overwritten). The new `README.md` documents the current feature set, workflow, and project structure accurately. Re-confirmed (no code change) that overwrite-prevention still produces `name (1).ext` / `(2)` / `(3)` correctly for JPG, PNG, and WEBP.
+19. **Improved batch processing error reporting** — `app/image_processor.py`'s `resize_image()` no longer swallows exceptions and returns `False`; it now raises the original exception (with message intact) after the pre-flight checks were converted from silent `return False` to `raise ValueError(...)`. The `finally` block still cleans up the `.tmp` file on any failure. `app/gui.py`'s `resize_images()` loop now wraps each `resize_image()` call in `try/except`, collecting `(filename, error_message)` pairs into a `failures` list while continuing to the next file — one bad image no longer silently reduces the count with no explanation. At the end, a summary dialog shows `Successful: X` / `Failed: Y`, and if there were any failures, a new scrollable `show_failures_dialog()` (a `Toplevel` with a read-only `tk.Text` + `ttk.Scrollbar`) lists every failed filename and its exact error message. The status label was updated to `"X succeeded, Y failed"`. Tested with a mix of a valid image, a corrupt file, and a missing file: processing continued past both failures, the correct filenames/messages were captured, and the failures dialog was only triggered when `failures` was non-empty. Also re-ran the full preset/aspect-ratio/quality/drag-drop regression suite to confirm nothing else broke.
+20. **Pinned dependency versions in `requirements.txt`** — changed `Pillow` / `tkinterdnd2` (unpinned) to `Pillow>=12.3.0` / `tkinterdnd2>=0.6.2`, matching the versions already verified working (§3). Confirmed `pip install -r requirements.txt` resolves correctly with the pins (dry-run tested). `README.md`'s Requirements table updated to show the pinned minimums. No code files changed.
 
 ---
 
@@ -231,7 +246,7 @@ e1a470e firest commit
 
 **Tracked:** `main.py`, `app/__init__.py`, `app/gui.py`, `app/image_processor.py`
 
-**Untracked:** `requirements.txt`, `run.ps1`, `run.bat`, `Image_Toolbox_Project_State.md`, `__pycache__/` directories
+**Untracked:** `requirements.txt`, `README.md`, `run.ps1`, `run.bat`, `Image_Toolbox_Project_State.md`, `settings.json`, `__pycache__/` directories
 
 ---
 
@@ -241,28 +256,29 @@ e1a470e firest commit
 
 - [x] **Disable "Process Images" button while processing** — completed 2026-07-19. Prevents overlapping background threads from racing on the same temp file. Tested and confirmed working.
 - [x] **Remove the "Save Resize Values" button** — completed 2026-07-19. Width/height are now read and validated directly when **Process Images** is clicked. Tested and confirmed working.
-- [x] **Prevent overwriting existing output files** — completed 2026-07-19. Output files that would collide with an existing name are now auto-numbered (`name (1).ext`, `name (2).ext`, ...). Tested and confirmed working.
-- [x] **Add aspect-ratio preserve toggle** — completed 2026-07-19. A "Keep Aspect Ratio" checkbox fits the image inside the requested width/height box without distorting it when checked; unchecked behavior (exact stretch) is unchanged. Tested and confirmed working.
+- [x] **Prevent overwriting existing output files** — completed 2026-07-19, re-verified 2026-07-19. Output files that would collide with an existing name are auto-numbered (`name (1).ext`, `name (2).ext`, `name (3).ext`, ...) instead of overwritten. Confirmed working identically for JPG, PNG, and WEBP.
+- [x] **Add aspect-ratio preserve toggle** — completed 2026-07-19, re-verified 2026-07-19. A "Keep Aspect Ratio" checkbox fits the image inside the requested width/height box without distorting it when checked; unchecked behavior (exact stretch) is unchanged. Confirmed working with both **Resize Preset** selections and manually-entered **Custom** sizes.
 - [x] **Add a JPEG/WEBP quality slider** — completed 2026-07-19. Slider ranges 1–100, defaults to 95, and only affects JPEG/WEBP saves (PNG ignores it). Tested and confirmed working.
 - [x] **Improve the GUI layout with ttk widgets** — completed 2026-07-19. Rebuilt with `ttk` widgets, grouped sections (Files / Resize Options / Output Options), consistent spacing, and a scrollbar on the file list. No functionality changed. Tested and confirmed working.
+- [x] **Add a Resize Preset system** — completed 2026-07-19. A "Resize Preset" `ttk.Combobox` offers 10 common sizes (up to 3840×2160 (4K)) plus "Custom"; picking a preset auto-fills and locks Width/Height, and "Custom" unlocks manual entry. Tested and confirmed working.
+- [x] **Add persistent application settings** — completed 2026-07-19. Output Folder, Width, Height, Output Format, Resize Preset, and Keep Aspect Ratio are auto-saved to `settings.json` and auto-restored on startup. Tested across preset and Custom sessions (save → close → relaunch, values matched).
+- [x] **Add Drag & Drop support** — completed 2026-07-19. Dropping JPG/JPEG/PNG/WEBP files onto the main window adds them to the file list (deduplicated, additive to the existing selection); unsupported files are ignored. Requires the new `tkinterdnd2` dependency. Tested: single file, multiple files (including space-containing paths), duplicate drop, and unsupported-file drop.
+- [x] **Improve batch processing error reporting** — completed 2026-07-19. Failures no longer stop or silently reduce the count: each failure is caught, logged with filename + exact error message, and processing continues. A `Successful: X / Failed: Y` summary always shows, with a scrollable dialog listing failures when there are any. Tested with valid/corrupt/missing files mixed in one batch.
+- [x] **Pin dependency versions in `requirements.txt`** — completed 2026-07-19. `Pillow>=12.3.0`, `tkinterdnd2>=0.6.2`. Verified installable via `pip install -r requirements.txt` dry-run.
 
 ### Current limitations
 
-- **Silent per-file failures** — if one image fails (corrupt file, permission error), it is skipped; only the success count is shown.
-- **No README** — this document serves as the project reference for now.
-- **Launch scripts not committed** — `requirements.txt`, `run.ps1`, and `run.bat` are still untracked.
+- **Launch scripts not committed** — `requirements.txt`, `README.md`, `run.ps1`, and `run.bat` are still untracked.
+- **`settings.json` is untracked** — like the other generated/local files, it isn't part of git tracking (see §9) and isn't yet listed in a `.gitignore`.
 
 ### Next recommended improvement
 
-**Show per-file error messages in the UI.** Right now a failed image is silently skipped and only the aggregate success count is shown at the end, so if some images fail there's no way to tell which ones or why without checking the output folder manually. Surfacing the filename and error reason for each failure (e.g. in the status label, a scrollable log area, or the completion dialog) would make failures actionable instead of just a lower number. This was already the recommended next step before the quality slider and ttk redesign were implemented, and remains the highest-value item still open.
+**Commit `README.md`, `requirements.txt`, and the launch scripts, and add a `.gitignore`.** These files have existed and been maintained for several rounds now but are still untracked in git (§9), and generated artifacts like `__pycache__/` and `settings.json` have no `.gitignore` entry to keep them out of version control. This is now the most out-of-date piece of the project relative to its actual state.
 
 ### Other possible improvements (backlog)
 
-- Add a `README.md` with quick-start instructions
-- Pin Pillow version in `requirements.txt` (e.g. `Pillow>=12.3.0`)
-- Commit launch scripts and `requirements.txt`
-- Add drag-and-drop for image selection
-- Add `.gitignore` for `__pycache__/`
+- Commit `README.md`, launch scripts, and `requirements.txt`
+- Add `.gitignore` for `__pycache__/` and `settings.json`
 
 ---
 

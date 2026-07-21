@@ -1,10 +1,10 @@
-import tkinter as tk
+from tkinterdnd2 import TkinterDnD
 
 from app.gui import ImageToolboxGUI
 
 
 def main():
-    root = tk.Tk()
+    root = TkinterDnD.Tk()
     ImageToolboxGUI(root)
     root.mainloop()
 

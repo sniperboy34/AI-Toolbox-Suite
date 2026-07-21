@@ -8,8 +8,6 @@ class ImageProcessor:
         self.selected_files = []
         self.output_folder = ""
         self.width = None
-        self.width = None
-        self.width = None
         self.height = None
         self.output_format = "JPG"
         self.keep_aspect_ratio = False
@@ -64,10 +62,10 @@ class ImageProcessor:
 
         try:
             if not self.output_folder:
-                return False
+                raise ValueError("Output folder is not set.")
 
             if not self.width or not self.height:
-                return False
+                raise ValueError("Resize values are not set.")
 
             # Fully load the source image into memory, then detach the
             # resized result from it with .copy() before closing the file.
@@ -165,9 +163,6 @@ class ImageProcessor:
             tmp_path = None
 
             return output_path
-
-        except Exception:
-            return False
 
         finally:
             if tmp_path and os.path.exists(tmp_path):

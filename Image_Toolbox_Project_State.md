@@ -304,4 +304,3 @@ _None currently — LICENSE, committing, and the real `.exe` build/smoke-test (a
 | Install deps | `pip install -r requirements.txt` |
 | PowerShell launch | `.\run.ps1` |
 | Batch launch | Double-click `run.bat` |
-

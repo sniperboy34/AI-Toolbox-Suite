@@ -1,5 +1,7 @@
 # Image Toolbox
 
+**Version 1.0**
+
 A small desktop GUI application for batch-resizing images, built with Python, tkinter, and ttk.
 
 ## Features
@@ -73,6 +75,14 @@ ImageToolbox/
     ├── gui.py              # tkinter/ttk UI (ImageToolboxGUI)
     └── image_processor.py  # Image resize/save logic (ImageProcessor)
 ```
+
+## Building a Windows Executable
+
+The app can be packaged into a standalone `.exe` with [PyInstaller](https://pyinstaller.org/):
+
+```powershell
+pip install pyinstaller
+pyinstaller --onefile --windowed --name ImageToolbox --collect-all tkinterdnd2 main.py
 
 ## Known Limitations
 

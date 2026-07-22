@@ -60,6 +60,24 @@ Or double-click `run.bat` in File Explorer.
 
 Your choices are saved automatically and restored the next time you open the app.
 
+## Building a Windows Executable
+
+The app can be packaged into a standalone `.exe` with [PyInstaller](https://pyinstaller.org/):
+
+```powershell
+pip install pyinstaller
+pyinstaller --onefile --windowed --name ImageToolbox --collect-all tkinterdnd2 main.py
+```
+
+- `--collect-all tkinterdnd2` is required — `tkinterdnd2` ships native drag-and-drop
+  libraries as package data (under `tkinterdnd2/tkdnd/`) that PyInstaller does not
+  bundle automatically. Without this flag, the built `.exe` will fail to start
+  drag-and-drop (or crash on launch) even though it works fine with `python main.py`.
+- The built executable is written to `dist\ImageToolbox.exe`. `settings.json` is
+  created next to the `.exe` itself (not wherever it happens to be launched from),
+  so your saved settings persist across runs of the packaged app the same way they
+  do when running from source.
+
 ## Project Structure
 
 ```
@@ -69,20 +87,12 @@ ImageToolbox/
 ├── .gitignore              # Ignores __pycache__/, *.pyc, settings.json
 ├── run.ps1                # PowerShell launcher script
 ├── run.bat                # Windows batch launcher script
-├── settings.json           # Auto-generated: your saved settings (created on first run)
+├── settings.json           # Auto-generated: your saved settings (created next to main.py, or next to the .exe if packaged)
 └── app/
     ├── __init__.py
     ├── gui.py              # tkinter/ttk UI (ImageToolboxGUI)
     └── image_processor.py  # Image resize/save logic (ImageProcessor)
 ```
-
-## Building a Windows Executable
-
-The app can be packaged into a standalone `.exe` with [PyInstaller](https://pyinstaller.org/):
-
-```powershell
-pip install pyinstaller
-pyinstaller --onefile --windowed --name ImageToolbox --collect-all tkinterdnd2 main.py
 
 ## Known Limitations
 

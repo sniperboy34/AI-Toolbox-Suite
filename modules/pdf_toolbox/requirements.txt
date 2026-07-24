@@ -1,0 +1,4 @@
+# No external packages are required at this stage — the GUI skeleton
+# uses only Python's standard library (tkinter), and PDF processing
+# has not been implemented yet. PDF-parsing dependencies will be added
+# here once pdf_processor.py's implementation begins.

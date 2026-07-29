@@ -1,3 +1,4 @@
+
 # PDF Toolbox
 
 **Version 1.0**
@@ -14,3 +15,13 @@ A desktop GUI application for batch PDF processing built with Python and tkinter
 
 ```bash
 python main.py
+```
+
+## Project Structure
+
+```text
+pdf_toolbox/
+├── app/
+├── main.py
+└── requirements.txt
+```

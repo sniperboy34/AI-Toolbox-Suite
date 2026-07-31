@@ -34,10 +34,22 @@ class PDFProcessor:
         str
             Full path of the saved output file.
         """
-        document = fitz.open(input_pdf)
+        try:
+            document = fitz.open(input_pdf)
+        except Exception:
+            raise ValueError("PDF is corrupted or unreadable.")
 
         try:
-            page_texts = [page.get_text() for page in document]
+            if document.needs_pass:
+                raise ValueError("PDF is password-protected and cannot be processed.")
+
+            if document.page_count == 0:
+                raise ValueError("PDF contains 0 pages (empty file).")
+
+            try:
+                page_texts = [page.get_text() for page in document]
+            except Exception:
+                raise ValueError("PDF is corrupted or unreadable.")
         finally:
             document.close()
 
@@ -46,6 +58,9 @@ class PDFProcessor:
         base_name = os.path.splitext(os.path.basename(input_pdf))[0]
         extension = ".txt" if output_format == "TXT" else ".md"
         output_file_path = os.path.join(output_folder, base_name + extension)
+
+        if os.path.exists(output_file_path):
+            raise ValueError(f"Output file already exists: {output_file_path}")
 
         with open(output_file_path, "w", encoding="utf-8") as f:
             f.write(full_text)

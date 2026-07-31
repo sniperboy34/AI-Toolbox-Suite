@@ -34,6 +34,15 @@ class PDFProcessor:
         str
             Full path of the saved output file.
         """
+        if not os.path.exists(output_folder):
+            raise ValueError(f"Output folder does not exist: {output_folder}")
+
+        if not os.path.isdir(output_folder):
+            raise ValueError(f"Output path is not a directory: {output_folder}")
+
+        if not os.access(output_folder, os.W_OK):
+            raise ValueError(f"Output folder is not writable: {output_folder}")
+
         try:
             document = fitz.open(input_pdf)
         except Exception:

@@ -3,9 +3,51 @@ import json
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from .pdf_processor import PDFProcessor
+
 APP_TITLE = "PDF Toolbox — AI Toolbox Suite"
 SETTINGS_FILENAME = "settings.json"
 VALID_OUTPUT_FORMATS = ("TXT", "Markdown")
+
+
+class Tooltip:
+    """Minimal tooltip helper: shows text on mouse enter, hides on mouse leave."""
+    
+    def __init__(self, widget, text=""):
+        self.widget = widget
+        self.text = text
+        self.tooltip = None
+        self.widget.bind("<Enter>", self._show_tooltip)
+        self.widget.bind("<Leave>", self._hide_tooltip)
+    
+    def _show_tooltip(self, event):
+        """Display the tooltip at mouse position."""
+        if not self.text:
+            return
+        x = event.x_root + 10
+        y = event.y_root + 10
+        self.tooltip = tk.Toplevel(self.widget)
+        self.tooltip.wm_overrideredirect(True)
+        self.tooltip.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            self.tooltip,
+            text=self.text,
+            background="lightyellow",
+            relief="solid",
+            borderwidth=1,
+            font=("TkDefaultFont", 9)
+        )
+        label.pack(padx=5, pady=3)
+    
+    def _hide_tooltip(self, event):
+        """Hide the tooltip."""
+        if self.tooltip:
+            self.tooltip.destroy()
+            self.tooltip = None
+    
+    def set_text(self, text):
+        """Update the tooltip text."""
+        self.text = text
 
 
 class PDFToolboxGUI:
@@ -81,6 +123,13 @@ class PDFToolboxGUI:
         self.file_listbox.pack(side="left", fill="both", expand=True)
         file_list_scroll.pack(side="right", fill="y")
 
+        self.selected_files_counter_label = ttk.Label(
+            self.files_frame,
+            text="Files selected: 0",
+            anchor="w"
+        )
+        self.selected_files_counter_label.pack(fill="x", pady=(10, 0))
+
         # --- Output + Processing Options row (side-by-side) -------------------
         output_and_options_row = ttk.Frame(container)
         output_and_options_row.pack(fill="x", pady=(0, 15))
@@ -103,6 +152,9 @@ class PDFToolboxGUI:
             anchor="w"
         )
         self.output_folder_label.pack(fill="x", pady=(8, 15))
+        
+        # Tooltip for the output folder label to show the full path on hover.
+        self.output_folder_tooltip = Tooltip(self.output_folder_label, text="")
 
         output_format_frame = ttk.Frame(self.output_frame)
         output_format_frame.pack(fill="x")
@@ -205,7 +257,7 @@ class PDFToolboxGUI:
 
         self.page_progress_label = ttk.Label(
             progress_info_row,
-            text="Processed pages:\n0 / 0",
+            text="Processed files:\n0 / 0",
             anchor="w",
             justify="left"
         )
@@ -262,6 +314,14 @@ class PDFToolboxGUI:
         self.load_settings()
         self._update_process_button_state()
 
+        # Capture the final window size at close time (position is
+        # deliberately never read/saved — only width/height).
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        self.save_settings()
+        self.root.destroy()
+
     def _settings_path(self):
         module_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         return os.path.join(module_root, SETTINGS_FILENAME)
@@ -275,6 +335,8 @@ class PDFToolboxGUI:
             "remove_header_footer": self.remove_header_footer_var.get(),
             "detect_titles_headings": self.detect_titles_headings_var.get(),
             "detect_lists": self.detect_lists_var.get(),
+            "window_width": self.root.winfo_width(),
+            "window_height": self.root.winfo_height(),
         }
 
         try:
@@ -306,7 +368,7 @@ class PDFToolboxGUI:
         saved_folder = settings.get("output_folder")
         if saved_folder and os.path.isdir(saved_folder):
             self.output_folder = saved_folder
-            self.output_folder_label.config(text=saved_folder)
+            self._update_output_folder_label(saved_folder)
         # A missing, empty, or no-longer-existing folder is ignored,
         # keeping the current default (None / "No output folder selected").
 
@@ -323,6 +385,20 @@ class PDFToolboxGUI:
                 var.set(saved_value)
             # A missing or non-boolean value is left as-is, keeping the
             # existing default (True) that the variable was initialized with.
+
+        saved_width = settings.get("window_width")
+        saved_height = settings.get("window_height")
+        min_width, min_height = self.root.minsize()
+        if (
+            isinstance(saved_width, int) and isinstance(saved_height, int)
+            and not isinstance(saved_width, bool) and not isinstance(saved_height, bool)
+            and saved_width >= min_width and saved_height >= min_height
+        ):
+            # Size only — deliberately no "+x+y" component, so the window's
+            # position is never restored, only its width/height.
+            self.root.geometry(f"{saved_width}x{saved_height}")
+        # Missing or invalid (non-integer, or smaller than the minimum
+        # window size) is ignored, keeping the default "900x650" set above.
 
     def _update_process_button_state(self):
         """Process is only enabled once both prerequisites are met: at
@@ -349,6 +425,35 @@ class PDFToolboxGUI:
 
         self.status_label.config(text=text)
 
+    def _update_selected_files_counter(self):
+        """Update the selected files counter label to reflect the current count."""
+        count = len(self.selected_files)
+        self.selected_files_counter_label.config(text=f"Files selected: {count}")
+
+    def _update_output_folder_label(self, folder_path):
+        """Update the output folder label to show basename and tooltip with full path."""
+        if folder_path:
+            # Show only the folder name (basename), not the full path.
+            folder_name = os.path.basename(folder_path)
+            self.output_folder_label.config(text=folder_name)
+            # Tooltip shows the full path on hover.
+            self.output_folder_tooltip.set_text(folder_path)
+        else:
+            # No folder selected: show the default message.
+            self.output_folder_label.config(text="No output folder selected")
+            # Clear the tooltip.
+            self.output_folder_tooltip.set_text("")
+
+    def _update_current_file_label(self, file_path):
+        """Update the current file label to show only the basename during processing."""
+        if file_path:
+            # Show only the file name (basename), not the full path.
+            file_name = os.path.basename(file_path)
+            self.current_file_label.config(text=f"Current file:\n{file_name}")
+        else:
+            # No file being processed: show the default placeholder.
+            self.current_file_label.config(text="Current file:\n—")
+
     def select_output_folder(self):
         folder = filedialog.askdirectory(title="Select Output Folder")
 
@@ -356,7 +461,7 @@ class PDFToolboxGUI:
             return
 
         self.output_folder = folder
-        self.output_folder_label.config(text=folder)
+        self._update_output_folder_label(folder)
         self.save_settings()
         self._update_process_button_state()
 
@@ -377,6 +482,7 @@ class PDFToolboxGUI:
                 self.file_listbox.insert(tk.END, os.path.basename(path))
 
         self._update_status()
+        self._update_selected_files_counter()
         self._update_process_button_state()
 
     def remove_selected(self):
@@ -392,6 +498,7 @@ class PDFToolboxGUI:
             del self.selected_files[index]
 
         self._update_status()
+        self._update_selected_files_counter()
         self._update_process_button_state()
 
     def clear_files(self):
@@ -399,6 +506,7 @@ class PDFToolboxGUI:
         self.selected_files.clear()
 
         self._update_status()
+        self._update_selected_files_counter()
         self._update_process_button_state()
 
     def process_files(self):
@@ -419,8 +527,37 @@ class PDFToolboxGUI:
         self.process_button.config(state="disabled")
         self.cancel_button.config(state="normal")
         self.status_label.config(text="Status: Preparing...")
+        self._update_current_file_label(self.selected_files[0])
+
+        processor = PDFProcessor()
+        total = len(self.selected_files)
+
+        for index, file_path in enumerate(self.selected_files):
+            self._update_current_file_label(file_path)
+
+            try:
+                processor.process_file(
+                    file_path,
+                    output_folder=self.output_folder,
+                    output_format=self.output_format.get(),
+                    options={
+                        "smart_paragraph_reconstruction": self.smart_paragraph_reconstruction_var.get(),
+                        "remove_page_numbers": self.remove_page_numbers_var.get(),
+                        "remove_header_footer": self.remove_header_footer_var.get(),
+                        "detect_titles_headings": self.detect_titles_headings_var.get(),
+                        "detect_lists": self.detect_lists_var.get(),
+                    }
+                )
+            except Exception as e:
+                messagebox.showerror("Error", f"Processing failed for {os.path.basename(file_path)}:\n{e}")
+
+            self.page_progress_label.config(text=f"Processed files:\n{index + 1} / {total}")
+
+        self.cancel_processing()
+        messagebox.showinfo("Completed", "Batch processing completed.")
 
     def cancel_processing(self):
         self.process_button.config(state="normal")
         self.cancel_button.config(state="disabled")
         self.status_label.config(text="Status: Ready")
+        self._update_current_file_label(None)

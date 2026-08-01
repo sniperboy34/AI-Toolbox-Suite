@@ -540,7 +540,7 @@ class PDFToolboxGUI:
         start_time = time.time()
 
         for index, file_path in enumerate(self.selected_files):
-            self._update_current_file_label(file_path)
+            self.root.after(0, self._update_current_file_label, file_path)
 
             try:
                 processor.process_file(
@@ -557,11 +557,19 @@ class PDFToolboxGUI:
                 )
             except Exception as e:
                 failed_files.append(os.path.basename(file_path))
-                messagebox.showerror("Error", f"Processing failed for {os.path.basename(file_path)}:\n{e}")
+                self.root.after(
+                    0,
+                    messagebox.showerror,
+                    "Error",
+                    f"Processing failed for {os.path.basename(file_path)}:\n{e}"
+                )
 
-            self.page_progress_label.config(text=f"Processed files:\n{index + 1} / {total}")
+            self.root.after(
+                0,
+                lambda text=f"Processed files:\n{index + 1} / {total}": self.page_progress_label.config(text=text)
+            )
 
-        self.cancel_processing()
+        self.root.after(0, self.cancel_processing)
 
         end_time = time.time()
         duration_seconds = end_time - start_time
@@ -573,7 +581,7 @@ class PDFToolboxGUI:
         if failed_files:
             summary += f"\n\nFailed: {len(failed_files)} / {total}\n" + "\n".join(failed_files)
 
-        messagebox.showinfo("Completed", summary)
+        self.root.after(0, messagebox.showinfo, "Completed", summary)
 
     def cancel_processing(self):
         self.process_button.config(state="normal")

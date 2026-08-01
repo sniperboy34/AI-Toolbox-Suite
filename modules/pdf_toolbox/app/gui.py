@@ -588,6 +588,9 @@ class PDFToolboxGUI:
                     lambda text=f"Processed files:\n{index + 1} / {total}": self.page_progress_label.config(text=text)
                 )
 
+            if not self.is_processing:
+                return
+
             self.root.after(0, self.cancel_processing)
 
             end_time = time.time()

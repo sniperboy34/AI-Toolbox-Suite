@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -531,6 +532,8 @@ class PDFToolboxGUI:
 
         processor = PDFProcessor()
         total = len(self.selected_files)
+        failed_files = []
+        start_time = time.time()
 
         for index, file_path in enumerate(self.selected_files):
             self._update_current_file_label(file_path)
@@ -549,12 +552,22 @@ class PDFToolboxGUI:
                     }
                 )
             except Exception as e:
+                failed_files.append(os.path.basename(file_path))
                 messagebox.showerror("Error", f"Processing failed for {os.path.basename(file_path)}:\n{e}")
 
             self.page_progress_label.config(text=f"Processed files:\n{index + 1} / {total}")
 
         self.cancel_processing()
-        messagebox.showinfo("Completed", "Batch processing completed.")
+
+        end_time = time.time()
+        duration_seconds = end_time - start_time
+
+        summary = "Batch processing completed."
+        summary += f"\n\nTotal processing time: {duration_seconds:.2f} seconds"
+        if failed_files:
+            summary += f"\n\nFailed: {len(failed_files)} / {total}\n" + "\n".join(failed_files)
+
+        messagebox.showinfo("Completed", summary)
 
     def cancel_processing(self):
         self.process_button.config(state="normal")

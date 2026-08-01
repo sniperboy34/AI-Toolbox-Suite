@@ -66,6 +66,11 @@ class PDFToolboxGUI:
         self.output_folder = None
         self.output_format = tk.StringVar(value="TXT")
 
+        # Tracks the background processing thread and whether it is
+        # currently running, so completion can be detected reliably.
+        self.processing_thread = None
+        self.is_processing = False
+
         self.root.title(APP_TITLE)
         self.root.geometry("900x650")
         self.root.minsize(800, 600)
@@ -531,7 +536,9 @@ class PDFToolboxGUI:
         self.status_label.config(text="Status: Preparing...")
         self._update_current_file_label(self.selected_files[0])
 
-        threading.Thread(target=self._process_files_worker).start()
+        self.is_processing = True
+        self.processing_thread = threading.Thread(target=self._process_files_worker)
+        self.processing_thread.start()
 
     def _process_files_worker(self):
         processor = PDFProcessor()
@@ -584,6 +591,7 @@ class PDFToolboxGUI:
         self.root.after(0, messagebox.showinfo, "Completed", summary)
 
     def cancel_processing(self):
+        self.is_processing = False
         self.process_button.config(state="normal")
         self.cancel_button.config(state="disabled")
         self.status_label.config(text="Status: Ready")

@@ -545,10 +545,12 @@ class PDFToolboxGUI:
         self._check_processing_complete(self.processing_thread)
 
     def _check_processing_complete(self, own_thread):
+        if self.processing_thread is not own_thread:
+            return
         if own_thread.is_alive():
             self.root.after(100, self._check_processing_complete, own_thread)
         else:
-            if self.processing_thread is own_thread and self.is_processing:
+            if self.is_processing:
                 self.cancel_processing()
 
     def _finalize_processing(self, own_thread):

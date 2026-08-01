@@ -517,6 +517,9 @@ class PDFToolboxGUI:
         self._update_process_button_state()
 
     def process_files(self):
+        if self.is_processing:
+            return
+
         if not self.selected_files:
             messagebox.showerror(
                 "Error",
@@ -541,54 +544,63 @@ class PDFToolboxGUI:
         self.processing_thread.start()
 
     def _process_files_worker(self):
-        processor = PDFProcessor()
-        total = len(self.selected_files)
-        failed_files = []
-        start_time = time.time()
+        try:
+            processor = PDFProcessor()
+            total = len(self.selected_files)
+            failed_files = []
+            start_time = time.time()
 
-        for index, file_path in enumerate(self.selected_files):
-            self.root.after(0, self._update_current_file_label, file_path)
+            for index, file_path in enumerate(self.selected_files):
+                self.root.after(0, self._update_current_file_label, file_path)
 
-            try:
-                processor.process_file(
-                    file_path,
-                    output_folder=self.output_folder,
-                    output_format=self.output_format.get(),
-                    options={
-                        "smart_paragraph_reconstruction": self.smart_paragraph_reconstruction_var.get(),
-                        "remove_page_numbers": self.remove_page_numbers_var.get(),
-                        "remove_header_footer": self.remove_header_footer_var.get(),
-                        "detect_titles_headings": self.detect_titles_headings_var.get(),
-                        "detect_lists": self.detect_lists_var.get(),
-                    }
-                )
-            except Exception as e:
-                failed_files.append(os.path.basename(file_path))
+                try:
+                    processor.process_file(
+                        file_path,
+                        output_folder=self.output_folder,
+                        output_format=self.output_format.get(),
+                        options={
+                            "smart_paragraph_reconstruction": self.smart_paragraph_reconstruction_var.get(),
+                            "remove_page_numbers": self.remove_page_numbers_var.get(),
+                            "remove_header_footer": self.remove_header_footer_var.get(),
+                            "detect_titles_headings": self.detect_titles_headings_var.get(),
+                            "detect_lists": self.detect_lists_var.get(),
+                        }
+                    )
+                except Exception as e:
+                    failed_files.append(os.path.basename(file_path))
+                    self.root.after(
+                        0,
+                        messagebox.showerror,
+                        "Error",
+                        f"Processing failed for {os.path.basename(file_path)}:\n{e}"
+                    )
+
                 self.root.after(
                     0,
-                    messagebox.showerror,
-                    "Error",
-                    f"Processing failed for {os.path.basename(file_path)}:\n{e}"
+                    lambda text=f"Processed files:\n{index + 1} / {total}": self.page_progress_label.config(text=text)
                 )
 
+            self.root.after(0, self.cancel_processing)
+
+            end_time = time.time()
+            duration_seconds = end_time - start_time
+            successful_count = total - len(failed_files)
+
+            summary = "Batch processing completed."
+            summary += f"\n\nSuccessfully processed: {successful_count} / {total}"
+            summary += f"\n\nTotal processing time: {duration_seconds:.2f} seconds"
+            if failed_files:
+                summary += f"\n\nFailed: {len(failed_files)} / {total}\n" + "\n".join(failed_files)
+
+            self.root.after(0, messagebox.showinfo, "Completed", summary)
+        except Exception as e:
+            self.root.after(0, self.cancel_processing)
             self.root.after(
                 0,
-                lambda text=f"Processed files:\n{index + 1} / {total}": self.page_progress_label.config(text=text)
+                messagebox.showerror,
+                "Error",
+                f"An unexpected error occurred during processing:\n{e}"
             )
-
-        self.root.after(0, self.cancel_processing)
-
-        end_time = time.time()
-        duration_seconds = end_time - start_time
-        successful_count = total - len(failed_files)
-
-        summary = "Batch processing completed."
-        summary += f"\n\nSuccessfully processed: {successful_count} / {total}"
-        summary += f"\n\nTotal processing time: {duration_seconds:.2f} seconds"
-        if failed_files:
-            summary += f"\n\nFailed: {len(failed_files)} / {total}\n" + "\n".join(failed_files)
-
-        self.root.after(0, messagebox.showinfo, "Completed", summary)
 
     def cancel_processing(self):
         self.is_processing = False

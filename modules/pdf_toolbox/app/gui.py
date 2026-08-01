@@ -552,6 +552,7 @@ class PDFToolboxGUI:
                 self.cancel_processing()
 
     def _process_files_worker(self):
+        own_thread = threading.current_thread()
         try:
             processor = PDFProcessor()
             total = len(self.selected_files)
@@ -588,7 +589,7 @@ class PDFToolboxGUI:
                     lambda text=f"Processed files:\n{index + 1} / {total}": self.page_progress_label.config(text=text)
                 )
 
-            if not self.is_processing:
+            if self.processing_thread is not own_thread:
                 return
 
             self.root.after(0, self.cancel_processing)
@@ -605,6 +606,8 @@ class PDFToolboxGUI:
 
             self.root.after(0, messagebox.showinfo, "Completed", summary)
         except Exception as e:
+            if self.processing_thread is not own_thread:
+                return
             self.root.after(0, self.cancel_processing)
             self.root.after(
                 0,

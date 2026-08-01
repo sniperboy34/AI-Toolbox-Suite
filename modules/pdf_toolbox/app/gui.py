@@ -542,6 +542,14 @@ class PDFToolboxGUI:
         self.is_processing = True
         self.processing_thread = threading.Thread(target=self._process_files_worker)
         self.processing_thread.start()
+        self._check_processing_complete()
+
+    def _check_processing_complete(self):
+        if self.processing_thread and self.processing_thread.is_alive():
+            self.root.after(100, self._check_processing_complete)
+        else:
+            if self.is_processing:
+                self.cancel_processing()
 
     def _process_files_worker(self):
         try:

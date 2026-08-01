@@ -611,6 +611,8 @@ class PDFToolboxGUI:
             )
 
     def cancel_processing(self):
+        if not self.is_processing:
+            return
         self.is_processing = False
         self.process_button.config(state="normal")
         self.cancel_button.config(state="disabled")

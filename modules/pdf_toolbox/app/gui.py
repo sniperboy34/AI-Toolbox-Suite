@@ -551,6 +551,36 @@ class PDFToolboxGUI:
             if self.is_processing:
                 self.cancel_processing()
 
+    def _finalize_processing(self, own_thread):
+        if self.processing_thread is not own_thread:
+            return
+        self.cancel_processing()
+
+    def _show_completion_summary(self, own_thread, summary):
+        if self.processing_thread is not own_thread:
+            return
+        messagebox.showinfo("Completed", summary)
+
+    def _show_worker_error(self, own_thread, message):
+        if self.processing_thread is not own_thread:
+            return
+        messagebox.showerror("Error", message)
+
+    def _update_current_file_label_for_session(self, own_thread, file_path):
+        if self.processing_thread is not own_thread:
+            return
+        self._update_current_file_label(file_path)
+
+    def _update_page_progress_label(self, own_thread, text):
+        if self.processing_thread is not own_thread:
+            return
+        self.page_progress_label.config(text=text)
+
+    def _show_file_error(self, own_thread, message):
+        if self.processing_thread is not own_thread:
+            return
+        messagebox.showerror("Error", message)
+
     def _process_files_worker(self):
         own_thread = threading.current_thread()
         try:
@@ -560,7 +590,8 @@ class PDFToolboxGUI:
             start_time = time.time()
 
             for index, file_path in enumerate(self.selected_files):
-                self.root.after(0, self._update_current_file_label, file_path)
+                if self.processing_thread is own_thread:
+                    self.root.after(0, self._update_current_file_label_for_session, own_thread, file_path)
 
                 try:
                     processor.process_file(
@@ -579,20 +610,23 @@ class PDFToolboxGUI:
                     failed_files.append(os.path.basename(file_path))
                     self.root.after(
                         0,
-                        messagebox.showerror,
-                        "Error",
+                        self._show_file_error,
+                        own_thread,
                         f"Processing failed for {os.path.basename(file_path)}:\n{e}"
                     )
 
-                self.root.after(
-                    0,
-                    lambda text=f"Processed files:\n{index + 1} / {total}": self.page_progress_label.config(text=text)
-                )
+                if self.processing_thread is own_thread:
+                    self.root.after(
+                        0,
+                        self._update_page_progress_label,
+                        own_thread,
+                        f"Processed files:\n{index + 1} / {total}"
+                    )
 
             if self.processing_thread is not own_thread:
                 return
 
-            self.root.after(0, self.cancel_processing)
+            self.root.after(0, self._finalize_processing, own_thread)
 
             end_time = time.time()
             duration_seconds = end_time - start_time
@@ -604,15 +638,15 @@ class PDFToolboxGUI:
             if failed_files:
                 summary += f"\n\nFailed: {len(failed_files)} / {total}\n" + "\n".join(failed_files)
 
-            self.root.after(0, messagebox.showinfo, "Completed", summary)
+            self.root.after(0, self._show_completion_summary, own_thread, summary)
         except Exception as e:
             if self.processing_thread is not own_thread:
                 return
-            self.root.after(0, self.cancel_processing)
+            self.root.after(0, self._finalize_processing, own_thread)
             self.root.after(
                 0,
-                messagebox.showerror,
-                "Error",
+                self._show_worker_error,
+                own_thread,
                 f"An unexpected error occurred during processing:\n{e}"
             )
 

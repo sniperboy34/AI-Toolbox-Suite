@@ -561,8 +561,10 @@ class PDFToolboxGUI:
 
         end_time = time.time()
         duration_seconds = end_time - start_time
+        successful_count = total - len(failed_files)
 
         summary = "Batch processing completed."
+        summary += f"\n\nSuccessfully processed: {successful_count} / {total}"
         summary += f"\n\nTotal processing time: {duration_seconds:.2f} seconds"
         if failed_files:
             summary += f"\n\nFailed: {len(failed_files)} / {total}\n" + "\n".join(failed_files)

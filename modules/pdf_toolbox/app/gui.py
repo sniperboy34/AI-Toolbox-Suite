@@ -618,3 +618,4 @@ class PDFToolboxGUI:
         self.cancel_button.config(state="disabled")
         self.status_label.config(text="Status: Ready")
         self._update_current_file_label(None)
+        self.processing_thread = None

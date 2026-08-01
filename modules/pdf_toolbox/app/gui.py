@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -530,6 +531,9 @@ class PDFToolboxGUI:
         self.status_label.config(text="Status: Preparing...")
         self._update_current_file_label(self.selected_files[0])
 
+        threading.Thread(target=self._process_files_worker).start()
+
+    def _process_files_worker(self):
         processor = PDFProcessor()
         total = len(self.selected_files)
         failed_files = []

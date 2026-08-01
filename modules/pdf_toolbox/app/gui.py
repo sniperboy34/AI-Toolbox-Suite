@@ -555,6 +555,7 @@ class PDFToolboxGUI:
         if self.processing_thread is not own_thread:
             return
         self.cancel_processing()
+        self.processing_thread = None
 
     def _show_completion_summary(self, own_thread, summary):
         if self.processing_thread is not own_thread:
@@ -651,4 +652,3 @@ class PDFToolboxGUI:
         self.cancel_button.config(state="disabled")
         self.status_label.config(text="Status: Ready")
         self._update_current_file_label(None)
-        self.processing_thread = None
